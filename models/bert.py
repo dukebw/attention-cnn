@@ -419,9 +419,6 @@ class Learned2DRelativeSelfAttention(nn.Module):
         self.register_buffer("relative_indices", relative_indices)
 
     def forward(self, hidden_states, attention_mask, head_mask=None):
-        import ipdb
-
-        ipdb.set_trace()
         assert len(hidden_states.shape) == 4
         b, w, h, c = hidden_states.shape
 
