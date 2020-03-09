@@ -57,7 +57,6 @@ BERT_CONFIG_NAME = "bert_config.json"
 TF_WEIGHTS_NAME = "model.ckpt"
 
 
-
 def prune_linear_layer(layer, index, dim=0):
     """ Prune a linear layer (a model parameters) to keep only entries in index.
         Return the pruned layer as a new layer with requires_grad=True.
@@ -227,7 +226,8 @@ class BertConfig(object):
             layer_norm_eps: The epsilon used by LayerNorm.
         """
         if isinstance(vocab_size_or_config_json_file, str) or (
-            sys.version_info[0] == 2 and isinstance(vocab_size_or_config_json_file, unicode)
+            sys.version_info[0] == 2
+            and isinstance(vocab_size_or_config_json_file, unicode)
         ):
             with open(vocab_size_or_config_json_file, "r", encoding="utf-8") as reader:
                 json_config = json.loads(reader.read())
@@ -324,10 +324,16 @@ class BertEmbeddings(nn.Module):
     def __init__(self, config):
         super(BertEmbeddings, self).__init__()
         self.add_positional_encoding = config.add_positional_encoding_to_input
-        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=0)
+        self.word_embeddings = nn.Embedding(
+            config.vocab_size, config.hidden_size, padding_idx=0
+        )
         if self.add_positional_encoding:
-            self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
-        self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
+            self.position_embeddings = nn.Embedding(
+                config.max_position_embeddings, config.hidden_size
+            )
+        self.token_type_embeddings = nn.Embedding(
+            config.type_vocab_size, config.hidden_size
+        )
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
@@ -336,7 +342,9 @@ class BertEmbeddings(nn.Module):
 
     def forward(self, input_ids, token_type_ids=None):
         seq_length = input_ids.size(1)
-        position_ids = torch.arange(seq_length, dtype=torch.long, device=input_ids.device)
+        position_ids = torch.arange(
+            seq_length, dtype=torch.long, device=input_ids.device
+        )
         position_ids = position_ids.unsqueeze(0).expand_as(input_ids)
         if token_type_ids is None:
             token_type_ids = torch.zeros_like(input_ids)
@@ -373,12 +381,20 @@ class Learned2DRelativeSelfAttention(nn.Module):
         if config.position_encoding_size != -1:
             position_embedding_size = config.position_encoding_size
 
-        self.row_embeddings = nn.Embedding(2 * max_position_embeddings - 1, position_embedding_size)
-        self.col_embeddings = nn.Embedding(2 * max_position_embeddings - 1, position_embedding_size)
+        self.row_embeddings = nn.Embedding(
+            2 * max_position_embeddings - 1, position_embedding_size
+        )
+        self.col_embeddings = nn.Embedding(
+            2 * max_position_embeddings - 1, position_embedding_size
+        )
 
         if not self.query_positional_score:
-            self.head_keys_row = nn.Linear(position_embedding_size, self.num_attention_heads, bias=False)
-            self.head_keys_col = nn.Linear(position_embedding_size, self.num_attention_heads, bias=False)
+            self.head_keys_row = nn.Linear(
+                position_embedding_size, self.num_attention_heads, bias=False
+            )
+            self.head_keys_col = nn.Linear(
+                position_embedding_size, self.num_attention_heads, bias=False
+            )
 
         # need query linear transformation
         if self.use_attention_data or self.query_positional_score:
@@ -391,27 +407,41 @@ class Learned2DRelativeSelfAttention(nn.Module):
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
         self.value = nn.Linear(self.all_head_size, config.hidden_size)
 
-        deltas = torch.arange(max_position_embeddings).view(1, -1) - torch.arange(max_position_embeddings).view(-1, 1)
+        # NOTE(brendan): deltas contains j - i in entry row = i, col = j.
+        deltas = torch.arange(max_position_embeddings).view(1, -1) - torch.arange(
+            max_position_embeddings
+        ).view(-1, 1)
         # shift the delta to [0, 2 * max_position_embeddings - 1]
+        # NOTE(brendan): relative_indices[i, j] returns a unique index
+        # corresponding to the distance j - i.
         relative_indices = deltas + max_position_embeddings - 1
 
         self.register_buffer("relative_indices", relative_indices)
 
     def forward(self, hidden_states, attention_mask, head_mask=None):
+        import ipdb
+
+        ipdb.set_trace()
         assert len(hidden_states.shape) == 4
         b, w, h, c = hidden_states.shape
 
         # -- B, W, H, num_heads, W, H
-        attention_scores, attention_scores_per_type = self.compute_attention_scores(hidden_states)
+        attention_scores, attention_scores_per_type = self.compute_attention_scores(
+            hidden_states
+        )
         shape = attention_scores.shape
-        attention_probs = nn.Softmax(dim=-1)(attention_scores.view(*shape[:-2], -1)).view(shape)
+        attention_probs = nn.Softmax(dim=-1)(
+            attention_scores.view(*shape[:-2], -1)
+        ).view(shape)
         # expand batch dim if 1
         if shape[0] != b:
             attention_probs = attention_probs.expand(b, *shape[1:])
 
         attention_probs = self.dropout(attention_probs)
 
-        input_values = torch.einsum('bijhkl,bkld->bijhd', attention_probs, hidden_states)
+        input_values = torch.einsum(
+            "bijhkl,bkld->bijhd", attention_probs, hidden_states
+        )
         input_values = input_values.contiguous().view(b, w, h, -1)
         output_value = self.value(input_values)
 
@@ -446,19 +476,23 @@ class Learned2DRelativeSelfAttention(nn.Module):
         # compute query data if needed
         if self.use_attention_data or self.query_positional_score:
             q = self.query(hidden_states)
-            q = q.view(batch_size, width, height, self.num_attention_heads, self.hidden_size)
+            q = q.view(
+                batch_size, width, height, self.num_attention_heads, self.hidden_size
+            )
 
         # compute key data if needed
         if self.use_attention_data:
             k = self.key(hidden_states)
-            k = k.view(batch_size, width, height, self.num_attention_heads, self.hidden_size)
+            k = k.view(
+                batch_size, width, height, self.num_attention_heads, self.hidden_size
+            )
 
         # Compute attention scores based on position
         # Probably not optimal way to order computation
-        relative_indices = self.relative_indices[:width,:width].reshape(-1)
+        relative_indices = self.relative_indices[:width, :width].reshape(-1)
         row_embeddings = self.row_embeddings(relative_indices)
 
-        relative_indices = self.relative_indices[:height,:height].reshape(-1)
+        relative_indices = self.relative_indices[:height, :height].reshape(-1)
         col_embeddings = self.col_embeddings(relative_indices)
 
         # keep attention scores/prob for plotting
@@ -467,8 +501,12 @@ class Learned2DRelativeSelfAttention(nn.Module):
 
         if not self.query_positional_score:
             # Caveat: sqrt rescaling is not used in this case
-            row_scores = self.head_keys_row(row_embeddings).view(1, width, 1, width, self.num_attention_heads)
-            col_scores = self.head_keys_col(col_embeddings).view(height, 1, height, 1, self.num_attention_heads)
+            row_scores = self.head_keys_row(row_embeddings).view(
+                1, width, 1, width, self.num_attention_heads
+            )
+            col_scores = self.head_keys_col(col_embeddings).view(
+                height, 1, height, 1, self.num_attention_heads
+            )
             # -- H, W, H, W, num_attention_heads
             attention_scores = row_scores + col_scores
             # -- H, W, num_attention_heads, H, W
@@ -480,11 +518,15 @@ class Learned2DRelativeSelfAttention(nn.Module):
 
         else:  # query_positional_score
             # B, W, H, num_attention_heads, D // 2
-            q_row = q[:, :, :, :, :self.hidden_size // 2]
-            q_col = q[:, :, :, :, self.hidden_size // 2:]
+            q_row = q[:, :, :, :, : self.hidden_size // 2]
+            q_col = q[:, :, :, :, self.hidden_size // 2 :]
 
-            row_scores = torch.einsum("bijhd,ikd->bijhk", q_row, row_embeddings.view(width, width, -1))
-            col_scores = torch.einsum("bijhd,jld->bijhl", q_col, col_embeddings.view(height, height, -1))
+            row_scores = torch.einsum(
+                "bijhd,ikd->bijhk", q_row, row_embeddings.view(width, width, -1)
+            )
+            col_scores = torch.einsum(
+                "bijhd,jld->bijhl", q_col, col_embeddings.view(height, height, -1)
+            )
 
             # -- B, H, W, num_attention_heads, H, W
             attention_scores = row_scores.unsqueeze(-1) + col_scores.unsqueeze(-2)
@@ -498,7 +540,7 @@ class Learned2DRelativeSelfAttention(nn.Module):
             attention_content_scores = torch.einsum("bijhd,bklhd->bijhkl", q, k)
             attention_content_scores = attention_content_scores / sqrt_normalizer
             attention_scores = attention_scores + attention_content_scores
-            
+
             # save
             attention_scores_per_type["q^Tk"] = attention_content_scores
 
@@ -509,11 +551,15 @@ class Learned2DRelativeSelfAttention(nn.Module):
         Compute the positional attention for an image of size width x height
         Returns: tensor of attention probabilities (width, height, num_head, width, height)
         """
-        relative_indices = self.relative_indices[:width,:width].reshape(-1)
-        row_scores = self.head_keys_row(self.row_embeddings(relative_indices)).view(1, width, 1, width, self.num_attention_heads)
+        relative_indices = self.relative_indices[:width, :width].reshape(-1)
+        row_scores = self.head_keys_row(self.row_embeddings(relative_indices)).view(
+            1, width, 1, width, self.num_attention_heads
+        )
 
-        relative_indices = self.relative_indices[:height,:height].reshape(-1)
-        col_scores = self.head_keys_col(self.col_embeddings(relative_indices)).view(height, 1, height, 1, self.num_attention_heads)
+        relative_indices = self.relative_indices[:height, :height].reshape(-1)
+        col_scores = self.head_keys_col(self.col_embeddings(relative_indices)).view(
+            height, 1, height, 1, self.num_attention_heads
+        )
 
         # -- H, W, H, W, num_attention_heads
         attention_scores = row_scores + col_scores
@@ -523,7 +569,9 @@ class Learned2DRelativeSelfAttention(nn.Module):
         # -- H, W, num_attention_heads, H, W
         flatten_shape = [height, width, self.num_attention_heads, height * width]
         unflatten_shape = [height, width, self.num_attention_heads, height, width]
-        attention_probs = nn.Softmax(dim=-1)(attention_scores.view(*flatten_shape)).view(*unflatten_shape)
+        attention_probs = nn.Softmax(dim=-1)(
+            attention_scores.view(*flatten_shape)
+        ).view(*unflatten_shape)
 
         return attention_probs
 
@@ -547,19 +595,27 @@ class GaussianSelfAttention(nn.Module):
         # CAREFUL: if change something here, change also in reset_heads (TODO remove code duplication)
         # shift of the each gaussian per head
         self.attention_centers = nn.Parameter(
-            torch.zeros(self.num_attention_heads, 2).normal_(0.0, config.gaussian_init_mu_std)
+            torch.zeros(self.num_attention_heads, 2).normal_(
+                0.0, config.gaussian_init_mu_std
+            )
         )
 
         if config.attention_isotropic_gaussian:
             # only one scalar (inverse standard deviation)
             # initialized to 1 + noise
-            attention_spreads = 1 + torch.zeros(self.num_attention_heads).normal_(0, config.gaussian_init_sigma_std)
+            attention_spreads = 1 + torch.zeros(self.num_attention_heads).normal_(
+                0, config.gaussian_init_sigma_std
+            )
         else:
             # Inverse standart deviation $Sigma^{-1/2}$
             # 2x2 matrix or a scalar per head
             # initialized to noisy identity matrix
-            attention_spreads = torch.eye(2).unsqueeze(0).repeat(self.num_attention_heads, 1, 1)
-            attention_spreads += torch.zeros_like(attention_spreads).normal_(0, config.gaussian_init_sigma_std)
+            attention_spreads = (
+                torch.eye(2).unsqueeze(0).repeat(self.num_attention_heads, 1, 1)
+            )
+            attention_spreads += torch.zeros_like(attention_spreads).normal_(
+                0, config.gaussian_init_sigma_std
+            )
 
         self.attention_spreads = nn.Parameter(attention_spreads)
 
@@ -569,9 +625,20 @@ class GaussianSelfAttention(nn.Module):
             # relative encoding grid (delta_x, delta_y, delta_x**2, delta_y**2, delta_x * delta_y)
             MAX_WIDTH_HEIGHT = 50
             range_ = torch.arange(MAX_WIDTH_HEIGHT)
-            grid = torch.cat([t.unsqueeze(-1) for t in torch.meshgrid([range_, range_])], dim=-1)
-            relative_indices = grid.unsqueeze(0).unsqueeze(0) - grid.unsqueeze(-2).unsqueeze(-2)
-            R = torch.cat([relative_indices, relative_indices ** 2, (relative_indices[..., 0] * relative_indices[..., 1]).unsqueeze(-1)], dim=-1)
+            grid = torch.cat(
+                [t.unsqueeze(-1) for t in torch.meshgrid([range_, range_])], dim=-1
+            )
+            relative_indices = grid.unsqueeze(0).unsqueeze(0) - grid.unsqueeze(
+                -2
+            ).unsqueeze(-2)
+            R = torch.cat(
+                [
+                    relative_indices,
+                    relative_indices ** 2,
+                    (relative_indices[..., 0] * relative_indices[..., 1]).unsqueeze(-1),
+                ],
+                dim=-1,
+            )
             R = R.float()
             self.register_buffer("R", R)
             self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
@@ -582,18 +649,25 @@ class GaussianSelfAttention(nn.Module):
             b = torch.zeros_like(self.attention_spreads)
         else:
             # $\Sigma^{-1}$
-            inv_covariance = torch.einsum('hij,hkj->hik', [self.attention_spreads, self.attention_spreads])
-            a, b, c = inv_covariance[:, 0, 0], inv_covariance[:, 0, 1], inv_covariance[:, 1, 1]
+            inv_covariance = torch.einsum(
+                "hij,hkj->hik", [self.attention_spreads, self.attention_spreads]
+            )
+            a, b, c = (
+                inv_covariance[:, 0, 0],
+                inv_covariance[:, 0, 1],
+                inv_covariance[:, 1, 1],
+            )
 
         mu_1, mu_2 = self.attention_centers[:, 0], self.attention_centers[:, 1]
 
-        t_h = -1/2 * torch.stack([
-            -2*(a*mu_1 + b*mu_2),
-            -2*(c*mu_2 + b*mu_1),
-            a,
-            c,
-            2 * b
-        ], dim=-1)
+        t_h = (
+            -1
+            / 2
+            * torch.stack(
+                [-2 * (a * mu_1 + b * mu_2), -2 * (c * mu_2 + b * mu_1), a, c, 2 * b],
+                dim=-1,
+            )
+        )
         return t_h
 
     def get_attention_probs(self, width, height):
@@ -603,21 +677,31 @@ class GaussianSelfAttention(nn.Module):
         u = self.get_heads_target_vectors()
 
         # Compute attention map for each head
-        attention_scores = torch.einsum('ijkld,hd->ijhkl', [self.R[:width,:height,:width,:height,:], u])
+        attention_scores = torch.einsum(
+            "ijkld,hd->ijhkl", [self.R[:width, :height, :width, :height, :], u]
+        )
         # Softmax
-        attention_probs = torch.nn.Softmax(dim=-1)(attention_scores.view(width, height, self.num_attention_heads, -1))
-        attention_probs = attention_probs.view(width, height, self.num_attention_heads, width, height)
+        attention_probs = torch.nn.Softmax(dim=-1)(
+            attention_scores.view(width, height, self.num_attention_heads, -1)
+        )
+        attention_probs = attention_probs.view(
+            width, height, self.num_attention_heads, width, height
+        )
 
         return attention_probs
 
     def reset_heads(self, heads):
         device = self.attention_spreads.data.device
-        reset_heads_mask = torch.zeros(self.num_attention_heads, device=device, dtype=torch.bool)
+        reset_heads_mask = torch.zeros(
+            self.num_attention_heads, device=device, dtype=torch.bool
+        )
         for head in heads:
             reset_heads_mask[head] = 1
 
         # Reinitialize mu and sigma of these heads
-        self.attention_centers.data[reset_heads_mask].zero_().normal_(0.0, self.gaussian_init_mu_std)
+        self.attention_centers.data[reset_heads_mask].zero_().normal_(
+            0.0, self.gaussian_init_mu_std
+        )
 
         if self.attention_isotropic_gaussian:
             self.attention_spreads.ones_().normal_(0, self.gaussian_init_sigma_std)
@@ -627,13 +711,16 @@ class GaussianSelfAttention(nn.Module):
             self.attention_spreads[:, 1, 1] += 1
 
         # Reinitialize value matrix for these heads
-        mask = torch.zeros(self.num_attention_heads, self.attention_head_size, dtype=torch.bool)
+        mask = torch.zeros(
+            self.num_attention_heads, self.attention_head_size, dtype=torch.bool
+        )
         for head in heads:
             mask[head] = 1
         mask = mask.view(-1).contiguous()
-        self.value.weight.data[:, mask].normal_(mean=0.0, std=self.config.initializer_range)
+        self.value.weight.data[:, mask].normal_(
+            mean=0.0, std=self.config.initializer_range
+        )
         # self.value.bias.data.zero_()
-
 
     def blured_attention(self, X):
         """Compute the weighted average according to gaussian attention without
@@ -650,22 +737,35 @@ class GaussianSelfAttention(nn.Module):
 
         kernels = []
         kernel_width = kernel_height = 7
-        assert kernel_width % 2 == 1 and kernel_height % 2 == 1, 'kernel size should be odd'
+        assert (
+            kernel_width % 2 == 1 and kernel_height % 2 == 1
+        ), "kernel size should be odd"
 
         for mean, std_inv in zip(self.attention_centers, self.attention_spreads):
-            conv_weights = gaussian_kernel_2d(mean, std_inv, size=(kernel_width, kernel_height))
-            conv_weights = conv_weights.view(1, 1, kernel_width, kernel_height).repeat(d_total, 1, 1, 1)
+            conv_weights = gaussian_kernel_2d(
+                mean, std_inv, size=(kernel_width, kernel_height)
+            )
+            conv_weights = conv_weights.view(1, 1, kernel_width, kernel_height).repeat(
+                d_total, 1, 1, 1
+            )
             kernels.append(conv_weights)
 
         weights = torch.cat(kernels)
 
         padding_width = (kernel_width - 1) // 2
         padding_height = (kernel_height - 1) // 2
-        out = F.conv2d(Y, weights, groups=d_total, padding=(padding_width, padding_height))
+        out = F.conv2d(
+            Y, weights, groups=d_total, padding=(padding_width, padding_height)
+        )
 
         # renormalize for padding
         all_one_input = torch.ones(1, d_total, width, height, device=X.device)
-        normalizer = F.conv2d(all_one_input, weights,  groups=d_total, padding=(padding_width, padding_height))
+        normalizer = F.conv2d(
+            all_one_input,
+            weights,
+            groups=d_total,
+            padding=(padding_width, padding_height),
+        )
         out /= normalizer
 
         return out.permute(0, 2, 3, 1).contiguous()
@@ -678,7 +778,9 @@ class GaussianSelfAttention(nn.Module):
             attention_probs = self.get_attention_probs(w, h)
             attention_probs = self.dropout(attention_probs)
 
-            input_values = torch.einsum('ijhkl,bkld->bijhd', attention_probs, hidden_states)
+            input_values = torch.einsum(
+                "ijhkl,bkld->bijhd", attention_probs, hidden_states
+            )
             input_values = input_values.contiguous().view(b, w, h, -1)
         else:
             input_values = self.blured_attention(hidden_states)
@@ -689,6 +791,7 @@ class GaussianSelfAttention(nn.Module):
             return attention_probs, output_value
         else:
             return output_value
+
 
 class BertSelfAttention(nn.Module):
     def __init__(self, config, output_attentions=False, keep_multihead_output=False):
@@ -713,7 +816,10 @@ class BertSelfAttention(nn.Module):
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
     def transpose_for_scores(self, x):
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+        new_x_shape = x.size()[:-1] + (
+            self.num_attention_heads,
+            self.attention_head_size,
+        )
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
 
@@ -774,11 +880,15 @@ class BertAttention(nn.Module):
     def __init__(self, config, output_attentions=False, keep_multihead_output=False):
         super(BertAttention, self).__init__()
         self.output_attentions = output_attentions
-        self.flatten_image = not config.use_gaussian_attention and not config.use_learned_2d_encoding
+        self.flatten_image = (
+            not config.use_gaussian_attention and not config.use_learned_2d_encoding
+        )
         self.use_gaussian_attention = config.use_gaussian_attention
         self.config = config
 
-        assert not config.use_gaussian_attention or not config.use_learned_2d_encoding  # TODO change to enum args
+        assert (
+            not config.use_gaussian_attention or not config.use_learned_2d_encoding
+        )  # TODO change to enum args
 
         if config.use_gaussian_attention:
             attention_cls = GaussianSelfAttention
@@ -787,7 +897,11 @@ class BertAttention(nn.Module):
         else:
             attention_cls = BertSelfAttention
 
-        self.self = attention_cls(config, output_attentions=output_attentions, keep_multihead_output=keep_multihead_output)
+        self.self = attention_cls(
+            config,
+            output_attentions=output_attentions,
+            keep_multihead_output=keep_multihead_output,
+        )
 
         self.output = BertSelfOutput(config)
 
@@ -806,17 +920,25 @@ class BertAttention(nn.Module):
 
         if self.use_gaussian_attention:
             device = self.self.attention_spreads.data.device
-            keep_heads = torch.ones(self.self.num_attention_heads, device=device, dtype=torch.bool)
+            keep_heads = torch.ones(
+                self.self.num_attention_heads, device=device, dtype=torch.bool
+            )
             for head in heads:
                 keep_heads[head] = 0
-            self.self.attention_spreads.data = self.self.attention_spreads.data[keep_heads].contiguous()
-            self.self.attention_centers.data = self.self.attention_centers.data[keep_heads].contiguous()
+            self.self.attention_spreads.data = self.self.attention_spreads.data[
+                keep_heads
+            ].contiguous()
+            self.self.attention_centers.data = self.self.attention_centers.data[
+                keep_heads
+            ].contiguous()
 
         dim = 0 if not self.use_gaussian_attention else 1
         self.self.value = prune_linear_layer(self.self.value, index, dim=dim)
         # Update hyper params
         self.self.num_attention_heads = self.self.num_attention_heads - len(heads)
-        self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
+        self.self.all_head_size = (
+            self.self.attention_head_size * self.self.num_attention_heads
+        )
 
     def reset_heads(self, heads):
         """Only for Gaussian Attention"""
@@ -878,7 +1000,9 @@ class BertLayer(nn.Module):
         super(BertLayer, self).__init__()
         self.output_attentions = output_attentions
         self.attention = BertAttention(
-            config, output_attentions=output_attentions, keep_multihead_output=keep_multihead_output
+            config,
+            output_attentions=output_attentions,
+            keep_multihead_output=keep_multihead_output,
         )
         self.intermediate = BertIntermediate(config)
         self.output = BertOutput(config)
@@ -899,24 +1023,37 @@ class BertEncoder(nn.Module):
         super(BertEncoder, self).__init__()
         self.output_attentions = output_attentions
         layer_constructor = lambda: BertLayer(
-            config, output_attentions=output_attentions, keep_multihead_output=keep_multihead_output
+            config,
+            output_attentions=output_attentions,
+            keep_multihead_output=keep_multihead_output,
         )
-        self.layer = nn.ModuleList([layer_constructor() for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList(
+            [layer_constructor() for _ in range(config.num_hidden_layers)]
+        )
 
         if config.use_learned_2d_encoding and config.share_position_encoding:
             for layer in self.layer[1:]:
-                self.layer[0].attention.self.row_embeddings = layer.attention.self.row_embeddings
-                self.layer[0].attention.self.col_embeddings = layer.attention.self.col_embeddings
-
+                self.layer[
+                    0
+                ].attention.self.row_embeddings = layer.attention.self.row_embeddings
+                self.layer[
+                    0
+                ].attention.self.col_embeddings = layer.attention.self.col_embeddings
 
     def forward(
-        self, hidden_states, attention_mask, output_all_encoded_layers=True, head_mask=None
+        self,
+        hidden_states,
+        attention_mask,
+        output_all_encoded_layers=True,
+        head_mask=None,
     ):
         all_encoder_layers = []
         all_attentions = []
         for i, layer_module in enumerate(self.layer):
             hidden_states = layer_module(
-                hidden_states, attention_mask, head_mask[i] if head_mask is not None else None
+                hidden_states,
+                attention_mask,
+                head_mask[i] if head_mask is not None else None,
             )
             if self.output_attentions:
                 attentions, hidden_states = hidden_states
@@ -972,7 +1109,9 @@ class BertLMPredictionHead(nn.Module):
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
         self.decoder = nn.Linear(
-            bert_model_embedding_weights.size(1), bert_model_embedding_weights.size(0), bias=False
+            bert_model_embedding_weights.size(1),
+            bert_model_embedding_weights.size(0),
+            bias=False,
         )
         self.decoder.weight = bert_model_embedding_weights
         self.bias = nn.Parameter(torch.zeros(bert_model_embedding_weights.size(0)))
@@ -1123,7 +1262,9 @@ class BertPreTrainedModel(nn.Module):
             # Extract archive to temp dir
             tempdir = tempfile.mkdtemp()
             logger.info(
-                "extracting archive file {} to temp dir {}".format(resolved_archive_file, tempdir)
+                "extracting archive file {} to temp dir {}".format(
+                    resolved_archive_file, tempdir
+                )
             )
             with tarfile.open(resolved_archive_file, "r:gz") as archive:
                 archive.extractall(tempdir)
@@ -1174,14 +1315,22 @@ class BertPreTrainedModel(nn.Module):
         def load(module, prefix=""):
             local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
             module._load_from_state_dict(
-                state_dict, prefix, local_metadata, True, missing_keys, unexpected_keys, error_msgs
+                state_dict,
+                prefix,
+                local_metadata,
+                True,
+                missing_keys,
+                unexpected_keys,
+                error_msgs,
             )
             for name, child in module._modules.items():
                 if child is not None:
                     load(child, prefix + name + ".")
 
         start_prefix = ""
-        if not hasattr(model, "bert") and any(s.startswith("bert.") for s in state_dict.keys()):
+        if not hasattr(model, "bert") and any(
+            s.startswith("bert.") for s in state_dict.keys()
+        ):
             start_prefix = "bert."
         load(model, prefix=start_prefix)
         if len(missing_keys) > 0:
@@ -1261,7 +1410,9 @@ class BertModel(BertPreTrainedModel):
         self.output_attentions = output_attentions
         self.embeddings = BertEmbeddings(config)
         self.encoder = BertEncoder(
-            config, output_attentions=output_attentions, keep_multihead_output=keep_multihead_output
+            config,
+            output_attentions=output_attentions,
+            keep_multihead_output=keep_multihead_output,
         )
         self.pooler = BertPooler(config)
         self.apply(self.init_bert_weights)
@@ -1315,8 +1466,12 @@ class BertModel(BertPreTrainedModel):
         # head_mask has shape num_hidden_layers x batch x n_heads x N x N
         if head_mask is not None:
             if head_mask.dim() == 1:
-                head_mask = head_mask.unsqueeze(0).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
-                head_mask = head_mask.expand_as(self.config.num_hidden_layers, -1, -1, -1, -1)
+                head_mask = (
+                    head_mask.unsqueeze(0).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
+                )
+                head_mask = head_mask.expand_as(
+                    self.config.num_hidden_layers, -1, -1, -1, -1
+                )
             elif head_mask.dim() == 2:
                 head_mask = (
                     head_mask.unsqueeze(1).unsqueeze(-1).unsqueeze(-1)
@@ -1408,9 +1563,13 @@ class BertForPreTraining(BertPreTrainedModel):
         super(BertForPreTraining, self).__init__(config)
         self.output_attentions = output_attentions
         self.bert = BertModel(
-            config, output_attentions=output_attentions, keep_multihead_output=keep_multihead_output
+            config,
+            output_attentions=output_attentions,
+            keep_multihead_output=keep_multihead_output,
         )
-        self.cls = BertPreTrainingHeads(config, self.bert.embeddings.word_embeddings.weight)
+        self.cls = BertPreTrainingHeads(
+            config, self.bert.embeddings.word_embeddings.weight
+        )
         self.apply(self.init_bert_weights)
 
     def forward(
@@ -1433,12 +1592,15 @@ class BertForPreTraining(BertPreTrainedModel):
             all_attentions, sequence_output, pooled_output = outputs
         else:
             sequence_output, pooled_output = outputs
-        prediction_scores, seq_relationship_score = self.cls(sequence_output, pooled_output)
+        prediction_scores, seq_relationship_score = self.cls(
+            sequence_output, pooled_output
+        )
 
         if masked_lm_labels is not None and next_sentence_label is not None:
             loss_fct = CrossEntropyLoss(ignore_index=-1)
             masked_lm_loss = loss_fct(
-                prediction_scores.view(-1, self.config.vocab_size), masked_lm_labels.view(-1)
+                prediction_scores.view(-1, self.config.vocab_size),
+                masked_lm_labels.view(-1),
             )
             next_sentence_loss = loss_fct(
                 seq_relationship_score.view(-1, 2), next_sentence_label.view(-1)
@@ -1506,7 +1668,9 @@ class BertForMaskedLM(BertPreTrainedModel):
         super(BertForMaskedLM, self).__init__(config)
         self.output_attentions = output_attentions
         self.bert = BertModel(
-            config, output_attentions=output_attentions, keep_multihead_output=keep_multihead_output
+            config,
+            output_attentions=output_attentions,
+            keep_multihead_output=keep_multihead_output,
         )
         self.cls = BertOnlyMLMHead(config, self.bert.embeddings.word_embeddings.weight)
         self.apply(self.init_bert_weights)
@@ -1535,7 +1699,8 @@ class BertForMaskedLM(BertPreTrainedModel):
         if masked_lm_labels is not None:
             loss_fct = CrossEntropyLoss(ignore_index=-1)
             masked_lm_loss = loss_fct(
-                prediction_scores.view(-1, self.config.vocab_size), masked_lm_labels.view(-1)
+                prediction_scores.view(-1, self.config.vocab_size),
+                masked_lm_labels.view(-1),
             )
             return masked_lm_loss
         elif self.output_attentions:
@@ -1596,7 +1761,9 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
         super(BertForNextSentencePrediction, self).__init__(config)
         self.output_attentions = output_attentions
         self.bert = BertModel(
-            config, output_attentions=output_attentions, keep_multihead_output=keep_multihead_output
+            config,
+            output_attentions=output_attentions,
+            keep_multihead_output=keep_multihead_output,
         )
         self.cls = BertOnlyNSPHead(config)
         self.apply(self.init_bert_weights)
@@ -1684,19 +1851,28 @@ class BertForSequenceClassification(BertPreTrainedModel):
     ```
     """
 
-    def __init__(self, config, num_labels=2, output_attentions=False, keep_multihead_output=False):
+    def __init__(
+        self, config, num_labels=2, output_attentions=False, keep_multihead_output=False
+    ):
         super(BertForSequenceClassification, self).__init__(config)
         self.output_attentions = output_attentions
         self.num_labels = num_labels
         self.bert = BertModel(
-            config, output_attentions=output_attentions, keep_multihead_output=keep_multihead_output
+            config,
+            output_attentions=output_attentions,
+            keep_multihead_output=keep_multihead_output,
         )
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, num_labels)
         self.apply(self.init_bert_weights)
 
     def forward(
-        self, input_ids, token_type_ids=None, attention_mask=None, labels=None, head_mask=None
+        self,
+        input_ids,
+        token_type_ids=None,
+        attention_mask=None,
+        labels=None,
+        head_mask=None,
     ):
         outputs = self.bert(
             input_ids,
@@ -1771,26 +1947,43 @@ class BertForMultipleChoice(BertPreTrainedModel):
     ```
     """
 
-    def __init__(self, config, num_choices=2, output_attentions=False, keep_multihead_output=False):
+    def __init__(
+        self,
+        config,
+        num_choices=2,
+        output_attentions=False,
+        keep_multihead_output=False,
+    ):
         super(BertForMultipleChoice, self).__init__(config)
         self.output_attentions = output_attentions
         self.num_choices = num_choices
         self.bert = BertModel(
-            config, output_attentions=output_attentions, keep_multihead_output=keep_multihead_output
+            config,
+            output_attentions=output_attentions,
+            keep_multihead_output=keep_multihead_output,
         )
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, 1)
         self.apply(self.init_bert_weights)
 
     def forward(
-        self, input_ids, token_type_ids=None, attention_mask=None, labels=None, head_mask=None
+        self,
+        input_ids,
+        token_type_ids=None,
+        attention_mask=None,
+        labels=None,
+        head_mask=None,
     ):
         flat_input_ids = input_ids.view(-1, input_ids.size(-1))
         flat_token_type_ids = (
-            token_type_ids.view(-1, token_type_ids.size(-1)) if token_type_ids is not None else None
+            token_type_ids.view(-1, token_type_ids.size(-1))
+            if token_type_ids is not None
+            else None
         )
         flat_attention_mask = (
-            attention_mask.view(-1, attention_mask.size(-1)) if attention_mask is not None else None
+            attention_mask.view(-1, attention_mask.size(-1))
+            if attention_mask is not None
+            else None
         )
         outputs = self.bert(
             flat_input_ids,
@@ -1867,19 +2060,28 @@ class BertForTokenClassification(BertPreTrainedModel):
     ```
     """
 
-    def __init__(self, config, num_labels=2, output_attentions=False, keep_multihead_output=False):
+    def __init__(
+        self, config, num_labels=2, output_attentions=False, keep_multihead_output=False
+    ):
         super(BertForTokenClassification, self).__init__(config)
         self.output_attentions = output_attentions
         self.num_labels = num_labels
         self.bert = BertModel(
-            config, output_attentions=output_attentions, keep_multihead_output=keep_multihead_output
+            config,
+            output_attentions=output_attentions,
+            keep_multihead_output=keep_multihead_output,
         )
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, num_labels)
         self.apply(self.init_bert_weights)
 
     def forward(
-        self, input_ids, token_type_ids=None, attention_mask=None, labels=None, head_mask=None
+        self,
+        input_ids,
+        token_type_ids=None,
+        attention_mask=None,
+        labels=None,
+        head_mask=None,
     ):
         outputs = self.bert(
             input_ids,
@@ -1968,7 +2170,9 @@ class BertForQuestionAnswering(BertPreTrainedModel):
         super(BertForQuestionAnswering, self).__init__(config)
         self.output_attentions = output_attentions
         self.bert = BertModel(
-            config, output_attentions=output_attentions, keep_multihead_output=keep_multihead_output
+            config,
+            output_attentions=output_attentions,
+            keep_multihead_output=keep_multihead_output,
         )
         self.qa_outputs = nn.Linear(config.hidden_size, 2)
         self.apply(self.init_bert_weights)

@@ -22,7 +22,9 @@ class BasicBlock(nn.Module):
             in_planes, planes, kernel_size=3, stride=stride, padding=1, bias=False
         )
         self.bn1 = nn.BatchNorm2d(planes)
-        self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=1, padding=1, bias=False)
+        self.conv2 = nn.Conv2d(
+            planes, planes, kernel_size=3, stride=1, padding=1, bias=False
+        )
         self.bn2 = nn.BatchNorm2d(planes)
 
         if not use_batchnorm:
@@ -32,9 +34,15 @@ class BasicBlock(nn.Module):
         if stride != 1 or in_planes != self.expansion * planes:
             self.shortcut = nn.Sequential(
                 nn.Conv2d(
-                    in_planes, self.expansion * planes, kernel_size=1, stride=stride, bias=False
+                    in_planes,
+                    self.expansion * planes,
+                    kernel_size=1,
+                    stride=stride,
+                    bias=False,
                 ),
-                nn.BatchNorm2d(self.expansion * planes) if use_batchnorm else nn.Sequential(),
+                nn.BatchNorm2d(self.expansion * planes)
+                if use_batchnorm
+                else nn.Sequential(),
             )
 
     def forward(self, x):
@@ -52,9 +60,13 @@ class Bottleneck(nn.Module):
         super(Bottleneck, self).__init__()
         self.conv1 = nn.Conv2d(in_planes, planes, kernel_size=1, bias=False)
         self.bn1 = nn.BatchNorm2d(planes)
-        self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=stride, padding=1, bias=False)
+        self.conv2 = nn.Conv2d(
+            planes, planes, kernel_size=3, stride=stride, padding=1, bias=False
+        )
         self.bn2 = nn.BatchNorm2d(planes)
-        self.conv3 = nn.Conv2d(planes, self.expansion * planes, kernel_size=1, bias=False)
+        self.conv3 = nn.Conv2d(
+            planes, self.expansion * planes, kernel_size=1, bias=False
+        )
         self.bn3 = nn.BatchNorm2d(self.expansion * planes)
 
         if not use_batchnorm:
@@ -64,9 +76,15 @@ class Bottleneck(nn.Module):
         if stride != 1 or in_planes != self.expansion * planes:
             self.shortcut = nn.Sequential(
                 nn.Conv2d(
-                    in_planes, self.expansion * planes, kernel_size=1, stride=stride, bias=False
+                    in_planes,
+                    self.expansion * planes,
+                    kernel_size=1,
+                    stride=stride,
+                    bias=False,
                 ),
-                nn.BatchNorm2d(self.expansion * planes) if use_batchnorm else nn.Sequential(),
+                nn.BatchNorm2d(self.expansion * planes)
+                if use_batchnorm
+                else nn.Sequential(),
             )
 
     def forward(self, x):
@@ -112,27 +130,39 @@ class ResNet(nn.Module):
 
 
 def ResNet10(num_classes=10, use_batchnorm=True):
-    return ResNet(BasicBlock, [1, 1, 1, 1], num_classes=num_classes, use_batchnorm=use_batchnorm)
+    return ResNet(
+        BasicBlock, [1, 1, 1, 1], num_classes=num_classes, use_batchnorm=use_batchnorm
+    )
 
 
 def ResNet18(num_classes=10, use_batchnorm=True):
-    return ResNet(BasicBlock, [2, 2, 2, 2], num_classes=num_classes, use_batchnorm=use_batchnorm)
+    return ResNet(
+        BasicBlock, [2, 2, 2, 2], num_classes=num_classes, use_batchnorm=use_batchnorm
+    )
 
 
 def ResNet34(num_classes=10, use_batchnorm=True):
-    return ResNet(BasicBlock, [3, 4, 6, 3], num_classes=num_classes, use_batchnorm=use_batchnorm)
+    return ResNet(
+        BasicBlock, [3, 4, 6, 3], num_classes=num_classes, use_batchnorm=use_batchnorm
+    )
 
 
 def ResNet50(num_classes=10, use_batchnorm=True):
-    return ResNet(Bottleneck, [3, 4, 6, 3], num_classes=num_classes, use_batchnorm=use_batchnorm)
+    return ResNet(
+        Bottleneck, [3, 4, 6, 3], num_classes=num_classes, use_batchnorm=use_batchnorm
+    )
 
 
 def ResNet101(num_classes=10, use_batchnorm=True):
-    return ResNet(Bottleneck, [3, 4, 23, 3], num_classes=num_classes, use_batchnorm=use_batchnorm)
+    return ResNet(
+        Bottleneck, [3, 4, 23, 3], num_classes=num_classes, use_batchnorm=use_batchnorm
+    )
 
 
 def ResNet152(num_classes=10, use_batchnorm=True):
-    return ResNet(Bottleneck, [3, 8, 36, 3], num_classes=num_classes, use_batchnorm=use_batchnorm)
+    return ResNet(
+        Bottleneck, [3, 8, 36, 3], num_classes=num_classes, use_batchnorm=use_batchnorm
+    )
 
 
 def test():

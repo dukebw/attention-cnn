@@ -20,10 +20,11 @@ class MaskedDataset(Dataset):
         batch_mask = torch.ones([width, height], dtype=torch.uint8)
         mask_left = np.random.randint(0, width - self.mask_size)
         mask_top = np.random.randint(0, height - self.mask_size)
-        batch_mask[mask_left : mask_left + self.mask_size, mask_top : mask_top + self.mask_size] = 0
+        batch_mask[
+            mask_left : mask_left + self.mask_size, mask_top : mask_top + self.mask_size
+        ] = 0
 
         return sample + (batch_mask,)
 
     def __len__(self):
         return len(self.dataset)
-

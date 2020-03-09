@@ -1,10 +1,12 @@
 import torch
 from copy import deepcopy
 
+
 class Mean:
     """
     Running average of the values that are 'add'ed
     """
+
     def __init__(self, update_weight=1):
         """
         :param update_weight: 1 for normal, 2 for t-average
@@ -20,7 +22,12 @@ class Mean:
             self.average = deepcopy(value)
         else:
             delta = value - self.average
-            self.average += delta * self.update_weight * weight / (self.counter + self.update_weight - 1)
+            self.average += (
+                delta
+                * self.update_weight
+                * weight
+                / (self.counter + self.update_weight - 1)
+            )
             if isinstance(self.average, torch.Tensor):
                 self.average.detach()
 
@@ -33,6 +40,7 @@ class Max:
     """
     Keeps track of the max of all the values that are 'add'ed
     """
+
     def __init__(self):
         self.max = None
 

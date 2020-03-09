@@ -16,4 +16,3 @@ def linear_warmup_cosine_lr_scheduler(optimizer, warmup_time_ratio, T_max):
             return cosine_decay
 
     return LambdaLR(optimizer, lr_lambda=lr_lambda)
-

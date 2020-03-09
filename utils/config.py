@@ -35,14 +35,18 @@ def parse_cli_overides(config: dict):
                 return new_value  # assume string
             raise ValueError()
         except Exception:
-            raise ValueError(f"Unable to parse config key '{key}' with value '{new_value}'")
+            raise ValueError(
+                f"Unable to parse config key '{key}' with value '{new_value}'"
+            )
 
     first_config_overide = True
     for key, original_value in config.items():
         override_value = cast_argument(key, original_value, args[key])
         if override_value is not None and override_value != original_value:
             config[key] = override_value
-            print_config_override(key, original_value, override_value, first_config_overide)
+            print_config_override(
+                key, original_value, override_value, first_config_overide
+            )
             first_config_overide = False
 
     return config

@@ -34,7 +34,6 @@ class BertImage(nn.Module):
             not config["pooling_use_resnet"]
         ), "Use either resnet or pooling_concatenate_size"
 
-
         if self.with_resnet:
             res50 = models.resnet50(pretrained=True)
             self.extract_feature = ResBottom(res50)
@@ -88,7 +87,9 @@ class BertImage(nn.Module):
             if temp < 0.2:
                 batch_images = batch_images + (
                     ((-batch_mask.unsqueeze(1).float()) + 1)
-                    * torch.normal(mean=0.5, std=torch.ones(batch_images.shape)).to(device)
+                    * torch.normal(mean=0.5, std=torch.ones(batch_images.shape)).to(
+                        device
+                    )
                 )
         return batch_images
 
@@ -135,7 +136,9 @@ class BertImage(nn.Module):
                 # downsample the mask
                 # mask any downsampled pixel if it contained one masked pixel originialy
                 feature_mask = ~(
-                    F.max_pool2d((~batch_mask).float(), self.feature_downscale_factor).byte()
+                    F.max_pool2d(
+                        (~batch_mask).float(), self.feature_downscale_factor
+                    ).byte()
                 )
             # reshape from NCHW to NHWC
             batch_features = batch_features.permute(0, 2, 3, 1)
@@ -149,17 +152,23 @@ class BertImage(nn.Module):
                 b, h, w, c = X.shape
                 Y = X.contiguous().view(b, h, w // kernel, c * kernel)
                 Y = Y.permute(0, 2, 1, 3).contiguous()
-                Y = Y.view(b, w // kernel, h // kernel, kernel * kernel * c).contiguous()
+                Y = Y.view(
+                    b, w // kernel, h // kernel, kernel * kernel * c
+                ).contiguous()
                 Y = Y.permute(0, 2, 1, 3).contiguous()
                 return Y
 
             # reshape from NCHW to NHWC
             batch_features = batch_images.permute(0, 2, 3, 1)
-            batch_features = downsample_concatenate(batch_features, self.pooling_concatenate_size)
+            batch_features = downsample_concatenate(
+                batch_features, self.pooling_concatenate_size
+            )
             feature_mask = None
             if batch_mask is not None:
                 feature_mask = batch_mask[
-                    :, :: self.pooling_concatenate_size, :: self.pooling_concatenate_size
+                    :,
+                    :: self.pooling_concatenate_size,
+                    :: self.pooling_concatenate_size,
                 ]
 
         else:
@@ -182,7 +191,9 @@ class BertImage(nn.Module):
         representations = all_representations[0]
 
         # mean pool for representation (features for classification)
-        cls_representation = representations.view(b, -1, representations.shape[-1]).mean(dim=1)
+        cls_representation = representations.view(
+            b, -1, representations.shape[-1]
+        ).mean(dim=1)
         cls_prediction = self.classifier(cls_representation)
 
         if self.output_attentions:

@@ -17,7 +17,12 @@ import tabulate
 
 import models
 from utils.data import MaskedDataset
-from utils.logging import get_num_parameter, human_format, DummySummaryWriter, sizeof_fmt
+from utils.logging import (
+    get_num_parameter,
+    human_format,
+    DummySummaryWriter,
+    sizeof_fmt,
+)
 from utils.plotting import plot_attention_positions_all_layers
 from utils.config import parse_cli_overides
 from utils.learning_rate import linear_warmup_cosine_lr_scheduler
@@ -110,7 +115,7 @@ def main():
 
     global output_dir
     output_dir = config["output_dir"]
-    os.makedirs(output_dir, exist_ok = True)
+    os.makedirs(output_dir, exist_ok=True)
 
     # save config in YAML file
     store_config()
@@ -124,7 +129,9 @@ def main():
     np.random.seed(config["seed"])
 
     # We will run on CUDA if there is a GPU available
-    device = torch.device("cuda" if not config["no_cuda"] and torch.cuda.is_available() else "cpu")
+    device = torch.device(
+        "cuda" if not config["no_cuda"] and torch.cuda.is_available() else "cpu"
+    )
 
     # Configure the dataset, model and the optimizer based on the global
     # `config` dictionary.
@@ -147,7 +154,15 @@ def main():
             heads_to_prune = find_degenerated_heads(model)
             model.prune_heads(heads_to_prune)
             original_heads_per_layer = [
-                torch.tensor(list(range(model.encoder.layer[layer_idx].attention.self.num_attention_heads)))
+                torch.tensor(
+                    list(
+                        range(
+                            model.encoder.layer[
+                                layer_idx
+                            ].attention.self.num_attention_heads
+                        )
+                    )
+                )
                 for layer_idx in range(config["num_hidden_layers"])
             ]
 
@@ -160,11 +175,17 @@ def main():
             heads_to_reset = find_degenerated_heads(model)
             model.reset_heads(heads_to_reset)
             original_heads_per_layer = [
-                torch.tensor([
-                    head_idx
-                    for head_idx in range(model.encoder.layer[layer_idx].attention.self.num_attention_heads)
-                    if head_idx not in heads_to_reset.get(layer_idx, [])
-                ])
+                torch.tensor(
+                    [
+                        head_idx
+                        for head_idx in range(
+                            model.encoder.layer[
+                                layer_idx
+                            ].attention.self.num_attention_heads
+                        )
+                        if head_idx not in heads_to_reset.get(layer_idx, [])
+                    ]
+                )
                 for layer_idx in range(config["num_hidden_layers"])
             ]
 
@@ -182,7 +203,9 @@ def main():
     best_accuracy_so_far = utils.accumulators.Max()
     checkpoint_every_n_epoch = None
     if config["num_keep_checkpoints"] > 0:
-        checkpoint_every_n_epoch = max(1, config["num_epochs"] // config["num_keep_checkpoints"])
+        checkpoint_every_n_epoch = max(
+            1, config["num_epochs"] // config["num_keep_checkpoints"]
+        )
     else:
         checkpoint_every_n_epoch = 999999999999
     global_step = 0
@@ -237,7 +260,9 @@ def main():
             loss = classification_loss
 
             if config["gaussian_spread_regularizer"] > 0:
-                gaussian_regularizer_loss = config["gaussian_spread_regularizer"] * get_singular_gaussian_penalty(model)
+                gaussian_regularizer_loss = config[
+                    "gaussian_spread_regularizer"
+                ] * get_singular_gaussian_penalty(model)
                 loss += gaussian_regularizer_loss
 
             acc = accuracy(prediction, batch_y)
@@ -245,12 +270,22 @@ def main():
             loss.backward()
 
             # set blocked gradient to 0
-            if config["fix_original_heads_position"] and original_heads_per_layer is not None:
+            if (
+                config["fix_original_heads_position"]
+                and original_heads_per_layer is not None
+            ):
                 for layer_idx, heads_to_fix in enumerate(original_heads_per_layer):
-                    model.encoder.layer[layer_idx].attention.self.attention_spreads.grad[heads_to_fix].zero_()
-                    model.encoder.layer[layer_idx].attention.self.attention_centers.grad[heads_to_fix].zero_()
+                    model.encoder.layer[
+                        layer_idx
+                    ].attention.self.attention_spreads.grad[heads_to_fix].zero_()
+                    model.encoder.layer[
+                        layer_idx
+                    ].attention.self.attention_centers.grad[heads_to_fix].zero_()
 
-            if config["fix_original_heads_weights"] and original_heads_per_layer is not None:
+            if (
+                config["fix_original_heads_weights"]
+                and original_heads_per_layer is not None
+            ):
                 for layer_idx, heads_to_fix in enumerate(original_heads_per_layer):
                     layer = model.encoder.layer[layer_idx]
                     n_head = layer.attention.self.num_attention_heads
@@ -265,9 +300,15 @@ def main():
             optimizer.step()
 
             writer.add_scalar("train/loss", loss, global_step)
-            writer.add_scalar("train/classification-loss", classification_loss, global_step)
+            writer.add_scalar(
+                "train/classification-loss", classification_loss, global_step
+            )
             if config["gaussian_spread_regularizer"] > 0:
-                writer.add_scalar("train/gaussian_regularizer_loss", gaussian_regularizer_loss, global_step)
+                writer.add_scalar(
+                    "train/gaussian_regularizer_loss",
+                    gaussian_regularizer_loss,
+                    global_step,
+                )
             writer.add_scalar("train/accuracy", acc, global_step)
 
             global_step += 1
@@ -276,13 +317,16 @@ def main():
             mean_train_loss.add(loss.item(), weight=len(batch_x))
             mean_train_accuracy.add(acc.item(), weight=len(batch_x))
 
-
         # Log training stats
         log_metric(
-            "accuracy", {"epoch": epoch, "value": mean_train_accuracy.value()}, {"split": "train"}
+            "accuracy",
+            {"epoch": epoch, "value": mean_train_accuracy.value()},
+            {"split": "train"},
         )
         log_metric(
-            "cross_entropy", {"epoch": epoch, "value": mean_train_loss.value()}, {"split": "train"}
+            "cross_entropy",
+            {"epoch": epoch, "value": mean_train_loss.value()},
+            {"split": "train"},
         )
         log_metric("lr", {"epoch": epoch, "value": scheduler.get_lr()[0]}, {})
 
@@ -301,10 +345,14 @@ def main():
 
         # Log test stats
         log_metric(
-            "accuracy", {"epoch": epoch, "value": mean_test_accuracy.value()}, {"split": "test"}
+            "accuracy",
+            {"epoch": epoch, "value": mean_test_accuracy.value()},
+            {"split": "test"},
         )
         log_metric(
-            "cross_entropy", {"epoch": epoch, "value": mean_test_loss.value()}, {"split": "test"}
+            "cross_entropy",
+            {"epoch": epoch, "value": mean_test_loss.value()},
+            {"split": "test"},
         )
         writer.add_scalar("eval/classification_loss", mean_test_loss.value(), epoch)
         writer.add_scalar("eval/accuracy", mean_test_accuracy.value(), epoch)
@@ -312,9 +360,16 @@ def main():
         # Store checkpoints for the best model so far
         is_best_so_far = best_accuracy_so_far.add(mean_test_accuracy.value())
         if is_best_so_far:
-            store_checkpoint("best.checkpoint", model, epoch, mean_test_accuracy.value())
+            store_checkpoint(
+                "best.checkpoint", model, epoch, mean_test_accuracy.value()
+            )
         if epoch % checkpoint_every_n_epoch == 0:
-            store_checkpoint("{:04d}.checkpoint".format(epoch), model, epoch, mean_test_accuracy.value())
+            store_checkpoint(
+                "{:04d}.checkpoint".format(epoch),
+                model,
+                epoch,
+                mean_test_accuracy.value(),
+            )
 
     # Store a final checkpoint
     store_checkpoint(
@@ -342,7 +397,9 @@ def log_metric(name, values, tags):
     print("{name}: {values} ({tags})".format(name=name, values=values, tags=tags))
 
 
-def get_dataset(test_batch_size=100, shuffle_train=True, num_workers=2, data_root="./data"):
+def get_dataset(
+    test_batch_size=100, shuffle_train=True, num_workers=2, data_root="./data"
+):
     """
     Create dataset loaders for the chosen dataset
     :return: Tuple (training_loader, test_loader)
@@ -369,7 +426,9 @@ def get_dataset(test_batch_size=100, shuffle_train=True, num_workers=2, data_roo
 
         return training_loader, test_loader
     else:
-        raise ValueError("Unexpected value for config[dataset] {}".format(config["dataset"]))
+        raise ValueError(
+            "Unexpected value for config[dataset] {}".format(config["dataset"])
+        )
 
     data_mean = (0.4914, 0.4822, 0.4465)
     data_stddev = (0.2023, 0.1994, 0.2010)
@@ -390,8 +449,12 @@ def get_dataset(test_batch_size=100, shuffle_train=True, num_workers=2, data_roo
         ]
     )
 
-    training_set = dataset(root=data_root, train=True, download=True, transform=transform_train)
-    test_set = dataset(root=data_root, train=False, download=True, transform=transform_test)
+    training_set = dataset(
+        root=data_root, train=True, download=True, transform=transform_train
+    )
+    test_set = dataset(
+        root=data_root, train=False, download=True, transform=transform_test
+    )
 
     training_loader = torch.utils.data.DataLoader(
         training_set,
@@ -405,6 +468,7 @@ def get_dataset(test_batch_size=100, shuffle_train=True, num_workers=2, data_roo
 
     return training_loader, test_loader
 
+
 def split_dict(d, first_predicate):
     """split the dictionary d into 2 dictionaries, first one contains elements validating first_predicate"""
     first, second = OrderedDict(), OrderedDict()
@@ -415,6 +479,7 @@ def split_dict(d, first_predicate):
             second[key] = value
     return first, second
 
+
 def get_optimizer(model_named_parameters, max_steps):
     """
     Create an optimizer for a given model
@@ -424,25 +489,27 @@ def get_optimizer(model_named_parameters, max_steps):
     if config["optimizer"] == "SGD":
         without_weight_decay, with_weight_decay = split_dict(
             OrderedDict(model_named_parameters),
-            lambda name: "attention_spreads" in name or "attention_centers" in name
+            lambda name: "attention_spreads" in name or "attention_centers" in name,
         )
 
         optimizer = torch.optim.SGD(
             [
                 {"params": with_weight_decay.values()},
-                {"params": without_weight_decay.values(), "weight_decay": 0.}
+                {"params": without_weight_decay.values(), "weight_decay": 0.0},
             ],
             lr=config["optimizer_learning_rate"],
             momentum=config["optimizer_momentum"],
             weight_decay=config["optimizer_weight_decay"],
         )
     elif config["optimizer"] == "Adam":
-        optimizer = torch.optim.Adam(model_named_parameters.values(), lr=config["optimizer_learning_rate"])
+        optimizer = torch.optim.Adam(
+            model_named_parameters.values(), lr=config["optimizer_learning_rate"]
+        )
     else:
         raise ValueError("Unexpected value for optimizer")
 
     if config["optimizer"] == "Adam":
-        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lambda e: 1.)
+        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lambda e: 1.0)
         print("Adam optimizer ignore all learning rate schedules.")
     elif config["optimizer_cosine_lr"]:
         scheduler = linear_warmup_cosine_lr_scheduler(
@@ -491,17 +558,22 @@ def get_model(device):
     model.to(device)
     if device == torch.device("cuda"):
         print("Use DataParallel if multi-GPU")
-        model = torch.nn.DataParallel(model)
+        # model = torch.nn.DataParallel(model)
         torch.backends.cudnn.benchmark = True
 
     return model
+
 
 def print_parameters(model):
     # compute number of parameters
     num_params, _ = get_num_parameter(model, trainable=False)
     num_bytes = num_params * 32 // 8  # assume float32 for all
-    print(f"Number of parameters: {human_format(num_params)} ({sizeof_fmt(num_bytes)} for float32)")
-    num_trainable_params, trainable_parameters = get_num_parameter(model, trainable=True)
+    print(
+        f"Number of parameters: {human_format(num_params)} ({sizeof_fmt(num_bytes)} for float32)"
+    )
+    num_trainable_params, trainable_parameters = get_num_parameter(
+        model, trainable=True
+    )
     print("Number of trainable parameters:", human_format(num_trainable_params))
 
     if config["only_list_parameters"]:
@@ -525,7 +597,7 @@ def print_flops(model):
 
     model = model.train()
     input_data = torch.rand(*shape)
-    num_flops, num_params = profile(model, inputs=(input_data, ))
+    num_flops, num_params = profile(model, inputs=(input_data,))
     print("Number of FLOPS:", human_format(num_flops))
 
 
@@ -539,16 +611,21 @@ def find_degenerated_heads(model):
 
     for layer_idx in range(config["num_hidden_layers"]):
         prune_heads = []
-        sigmas_half_inv = model_params["encoder.layer.{}.attention.self.attention_spreads".format(layer_idx)]
+        sigmas_half_inv = model_params[
+            "encoder.layer.{}.attention.self.attention_spreads".format(layer_idx)
+        ]
 
         for head_idx in range(config["num_attention_heads"]):
             head_is_degenerated = False
 
-
             if config["attention_isotropic_gaussian"]:
                 sigma_inv = sigmas_half_inv[head_idx]
                 if sigma_inv ** 2 < 1e-5:
-                    degenerated_reasons.append("Sigma too low -> uniform attention: sigma**-2= {}".format(sigma_inv ** 2))
+                    degenerated_reasons.append(
+                        "Sigma too low -> uniform attention: sigma**-2= {}".format(
+                            sigma_inv ** 2
+                        )
+                    )
                     head_is_degenerated = True
             else:
                 sigma_half_inv = sigmas_half_inv[head_idx]
@@ -557,10 +634,18 @@ def find_degenerated_heads(model):
                 condition_number = eig_values.max() / eig_values.min()
 
                 if condition_number > 1000:
-                    degenerated_reasons.append("Covariance matrix is ill defined: condition number = {}".format(condition_number))
+                    degenerated_reasons.append(
+                        "Covariance matrix is ill defined: condition number = {}".format(
+                            condition_number
+                        )
+                    )
                     head_is_degenerated = True
                 elif eig_values.max() < 1e-5:
-                    degenerated_reasons.append("Covariance matrix is close to 0: largest eigen value = {}".format(eig_values.max()))
+                    degenerated_reasons.append(
+                        "Covariance matrix is close to 0: largest eigen value = {}".format(
+                            eig_values.max()
+                        )
+                    )
                     head_is_degenerated = True
 
             if head_is_degenerated:
@@ -572,17 +657,24 @@ def find_degenerated_heads(model):
     if degenerated_heads:
         print("Degenerated heads:")
         reasons = iter(degenerated_reasons)
-        table = [(layer, head, next(reasons)) for layer, heads in degenerated_heads.items() for head in heads]
+        table = [
+            (layer, head, next(reasons))
+            for layer, heads in degenerated_heads.items()
+            for head in heads
+        ]
         print(tabulate.tabulate(table, headers=["layer", "head", "reason"]))
 
     return degenerated_heads
+
 
 def get_singular_gaussian_penalty(model):
     """Return scalar high when attention covariance get very singular
     """
     if config["attention_isotropic_gaussian"]:
         # TODO move at setup
-        print("Singular gaussian penalty ignored as `attention_isotropic_gaussian` is True")
+        print(
+            "Singular gaussian penalty ignored as `attention_isotropic_gaussian` is True"
+        )
         return 0
 
     condition_numbers = []
@@ -593,7 +685,8 @@ def get_singular_gaussian_penalty(model):
             condition_number = eig_values.max() / eig_values.min()
             condition_numbers.append(condition_number)
 
-    return torch.mean((torch.tensor(condition_numbers)  - 1) ** 2)
+    return torch.mean((torch.tensor(condition_numbers) - 1) ** 2)
+
 
 def store_config():
     path = os.path.join(output_dir, "config.yaml")
@@ -624,12 +717,17 @@ def store_checkpoint(filename, model, epoch, test_accuracy):
         {
             "epoch": epoch,
             "test_accuracy": test_accuracy,
-            "model_state_dict": OrderedDict([
-                (key, value) for key, value in model.state_dict().items() if keep_state_dict_keys(key)
-            ]),
+            "model_state_dict": OrderedDict(
+                [
+                    (key, value)
+                    for key, value in model.state_dict().items()
+                    if keep_state_dict_keys(key)
+                ]
+            ),
         },
         path,
     )
+
 
 def restore_checkpoint(filename, model, device):
     """Load model from a checkpoint"""

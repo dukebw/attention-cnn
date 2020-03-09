@@ -26,18 +26,16 @@ def plot_grid_query_pix(width, ax=None):
     ax.grid(True, alpha=0.5)
 
     # query pixel
-    querry_pix = Rectangle(xy=(-0.5,-0.5),
-                          width=1,
-                          height=1,
-                          edgecolor="black",
-                          fc='None',
-                          lw=2)
+    querry_pix = Rectangle(
+        xy=(-0.5, -0.5), width=1, height=1, edgecolor="black", fc="None", lw=2
+    )
 
-    ax.add_patch(querry_pix);
+    ax.add_patch(querry_pix)
 
     ax.set_xlim(-width / 2, width / 2)
     ax.set_ylim(-width / 2, width / 2)
     ax.set_aspect("equal")
+
 
 def plot_attention_layer(model, layer_idx, width, ax=None):
     """Plot the 2D attention probabilities of all heads on an image
@@ -51,7 +49,17 @@ def plot_attention_layer(model, layer_idx, width, ax=None):
 
     contours = np.array([0.9, 0.5])
     linestyles = [":", "-"]
-    flat_colors = ["#3498db", "#f1c40f", "#2ecc71", "#e74c3c", "#e67e22", "#9b59b6", "#34495e", "#1abc9c", "#95a5a6"]
+    flat_colors = [
+        "#3498db",
+        "#f1c40f",
+        "#2ecc71",
+        "#e74c3c",
+        "#e67e22",
+        "#9b59b6",
+        "#34495e",
+        "#1abc9c",
+        "#95a5a6",
+    ]
 
     if ax is None:
         fig, ax = plt.subplots()
@@ -65,17 +73,19 @@ def plot_attention_layer(model, layer_idx, width, ax=None):
     attention_at_center = attention_probs[width // 2, height // 2]
     attention_at_center = attention_at_center.detach().cpu().numpy()
 
-#     compute integral of distribution for thresholding
+    #     compute integral of distribution for thresholding
     n = 1000
     t = np.linspace(0, attention_at_center.max(), n)
-    integral = ((attention_at_center >= t[:, None, None, None]) * attention_at_center).sum(
-        axis=(-1, -2)
-    )
+    integral = (
+        (attention_at_center >= t[:, None, None, None]) * attention_at_center
+    ).sum(axis=(-1, -2))
 
     plot_grid_query_pix(width - 2, ax)
 
     for h, color in zip(range(num_heads), itertools.cycle(flat_colors)):
-        f = interpolate.interp1d(integral[:, h], t, fill_value=(1, 0), bounds_error=False)
+        f = interpolate.interp1d(
+            integral[:, h], t, fill_value=(1, 0), bounds_error=False
+        )
         t_contours = f(contours)
 
         # remove duplicate contours if any
@@ -88,15 +98,17 @@ def plot_attention_layer(model, layer_idx, width, ax=None):
                 np.arange(-height // 2, height // 2) + 1,
                 attention_at_center[h],
                 [t_contour],
-                extent=[- width // 2, width // 2 + 1, - height // 2, height // 2 + 1],
+                extent=[-width // 2, width // 2 + 1, -height // 2, height // 2 + 1],
                 colors=color,
-                linestyles=linestyle
+                linestyles=linestyle,
             )
 
     return ax
 
 
-def plot_attention_positions_all_layers(model, width, tensorboard_writer=None, global_step=None):
+def plot_attention_positions_all_layers(
+    model, width, tensorboard_writer=None, global_step=None
+):
 
     for layer_idx in range(len(model.encoder.layer)):
         fig, ax = plt.subplots()
@@ -104,5 +116,7 @@ def plot_attention_positions_all_layers(model, width, tensorboard_writer=None, g
 
         ax.set_title(f"Layer {layer_idx + 1}")
         if tensorboard_writer:
-            tensorboard_writer.add_figure(f"attention/layer{layer_idx}", fig, global_step=global_step)
+            tensorboard_writer.add_figure(
+                f"attention/layer{layer_idx}", fig, global_step=global_step
+            )
         plt.close(fig)
